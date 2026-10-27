@@ -5,26 +5,40 @@ on:
     workflows: ['Piloto CI']
     types: [completed]
 
+# El GITHUB_TOKEN del workflow NO puede crear checks. Sólo el token
+# temporal de la GitHub App, instalado en el repo sintético, puede hacerlo.
 permissions:
   actions: read
   contents: read
   pull-requests: read
-  checks: write
 
 jobs:
   evaluar:
-    name: Evaluar politicas (base protegida)
+    name: Evaluar politicas (App independiente)
     if: ${{ github.event.workflow_run.event == 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Crear y proteger ANTES de fusionar: Settings > Environments >
+    # nx-piloto-policy > Deployment branches: Protected branches only.
+    # Secrets y vars existen únicamente en este entorno.
+    environment: nx-piloto-policy
     steps:
-      # Solo código confiable en main. Nunca checkout del HEAD del PR.
-      - name: Checkout de main protegida
+      - name: Checkout exclusivo de main protegida
         uses: actions/checkout@v4
         with:
           ref: main
           persist-credentials: false
-      - name: Evaluación del evento y publicación del check
+      - name: Token temporal de la GitHub App del evaluador
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.NX_POLICY_APP_CLIENT_ID }}
+          private-key: ${{ secrets.NX_POLICY_APP_PRIVATE_KEY }}
+          permission-checks: write
+          permission-actions: read
+          permission-contents: read
+          permission-pull-requests: read
+      - name: Evaluar y publicar check con identidad de App
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: python3 politica_pr.py
