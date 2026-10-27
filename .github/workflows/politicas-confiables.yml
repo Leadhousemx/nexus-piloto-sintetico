@@ -1,0 +1,30 @@
+name: Piloto Politicas (trusted)
+
+on:
+  workflow_run:
+    workflows: ['Piloto CI']
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+  checks: write
+
+jobs:
+  evaluar:
+    name: Evaluar politicas (base protegida)
+    if: ${{ github.event.workflow_run.event == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Solo código confiable en main. Nunca checkout del HEAD del PR.
+      - name: Checkout de main protegida
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Evaluación del evento y publicación del check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 politica_pr.py
